@@ -1,0 +1,131 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f7f7f8;
+  color: #171717;
+}
+
+a {
+  color: inherit;
+}
+
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+.card {
+  background: white;
+  border: 1px solid #e6e6e8;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.stack {
+  display: grid;
+  gap: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  border: 1px solid #d6d6da;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: white;
+}
+
+textarea {
+  min-height: 180px;
+}
+
+button,
+.button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #171717;
+  color: white;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.badge {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #ececf0;
+  font-size: 12px;
+}
+
+.warning {
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+
+.secondary {
+  background: #ececf0;
+  color: #171717;
+}
+
+.success-badge {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+fieldset {
+  border: 1px solid #e6e6e8;
+}
+
+legend {
+  padding: 0 6px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+}
+
+code {
+  background: #ececf0;
+  padding: 2px 5px;
+  border-radius: 6px;
+}
