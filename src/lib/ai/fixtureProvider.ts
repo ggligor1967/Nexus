@@ -9,6 +9,10 @@ function inferScenario(prompt: string): "standard" | "critical" | "invalid_json"
 
   const value = prompt.toLowerCase();
 
+  if (value.includes("invalid_json")) {
+    return "invalid_json";
+  }
+
   if (
     value.includes("surveillance") ||
     value.includes("employee activity") ||
