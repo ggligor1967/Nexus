@@ -4,7 +4,7 @@ import { NexusPlanSchema } from "@/lib/ai/schema";
 import { buildNexusPrompt } from "@/lib/ai/prompt";
 import { generatePlanFromAI } from "@/lib/ai/generatePlan";
 import { getAIProviderName } from "@/lib/ai/provider";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createAdminSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getOwnedProject, requireApiUser } from "@/lib/auth/guards";
 
 export const runtime = "nodejs";
@@ -67,8 +67,9 @@ export async function POST(
     providerName === "fixture"
       ? "fixture"
       : process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
+  const adminSupabase = createAdminSupabaseClient();
 
-  const { data: run, error: runError } = await supabase
+  const { data: run, error: runError } = await adminSupabase
     .from("ai_plan_runs")
     .insert({
       project_id: projectId,
@@ -102,7 +103,7 @@ export async function POST(
 
     const validatedPlan = NexusPlanSchema.parse(parsedJson);
 
-    await supabase
+    await adminSupabase
       .from("ai_plan_runs")
       .update({
         status: "completed",
@@ -110,7 +111,8 @@ export async function POST(
         plan_json: validatedPlan,
         completed_at: new Date().toISOString()
       })
-      .eq("id", run.id);
+      .eq("id", run.id)
+      .eq("project_id", projectId);
 
     await supabase
       .from("projects")
@@ -127,7 +129,7 @@ export async function POST(
       plan: validatedPlan
     });
   } catch (error) {
-    await supabase
+    await adminSupabase
       .from("ai_plan_runs")
       .update({
         status: "failed",
@@ -136,7 +138,8 @@ export async function POST(
           error instanceof Error ? error.message : "Unknown generation error",
         completed_at: new Date().toISOString()
       })
-      .eq("id", run.id);
+      .eq("id", run.id)
+      .eq("project_id", projectId);
 
     return NextResponse.json(
       {

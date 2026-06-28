@@ -74,6 +74,29 @@ function createAdminClient() {
   });
 }
 
+async function createUserSupabaseClient(user: typeof userA) {
+  const url = getEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const anonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+
+  if (!url || !anonKey) {
+    throw new Error("Missing Supabase browser environment variables for E2E DB assertions.");
+  }
+
+  const supabase = createClient(url, anonKey, {
+    auth: {
+      persistSession: false
+    }
+  });
+
+  const { error } = await supabase.auth.signInWithPassword(user);
+
+  if (error) {
+    throw error;
+  }
+
+  return supabase;
+}
+
 test.describe("Nexus v0.5 core flow", () => {
   test("AUTH-001/002/003: sign up or login, then logout protects dashboard", async ({ page }) => {
     await signUpOrLogin(page, userA);
@@ -227,6 +250,72 @@ test.describe("Nexus v0.5 core flow", () => {
         build_ready_acknowledged: true
       }
     });
+  });
+
+  test("SEC-003: client can read own AI runs but cannot write them directly", async ({ page }) => {
+    await signUpOrLogin(page, userA);
+    const projectId = await createProject(page, `AI Run RLS ${Date.now()}`);
+
+    const generateResponse = await page.request.post(`/api/projects/${projectId}/generate-plan`, {
+      data: {
+        rawConcept:
+          "A reliable planning assistant that creates validated product artifacts for teams while preserving a server-controlled audit trail for AI plan runs.",
+        platform: ["web", "ai"],
+        language: "en",
+        riskDomain: "general",
+        outputType: "full_prd",
+        constraints: {}
+      }
+    });
+
+    expect(generateResponse.status()).toBe(200);
+
+    const userSupabase = await createUserSupabaseClient(userA);
+    const { data: runs, error: selectError } = await userSupabase
+      .from("ai_plan_runs")
+      .select("id, project_id, concept_input_id, model_name")
+      .eq("project_id", projectId)
+      .limit(1);
+
+    expect(selectError).toBeNull();
+    expect(runs).toHaveLength(1);
+
+    const run = runs?.[0];
+    expect(run).toMatchObject({
+      project_id: projectId,
+      model_name: "fixture"
+    });
+
+    const { data: insertedRuns, error: insertError } = await userSupabase
+      .from("ai_plan_runs")
+      .insert({
+        project_id: projectId,
+        concept_input_id: run?.concept_input_id,
+        model_name: "client-direct",
+        status: "queued"
+      })
+      .select("id");
+
+    expect(insertError).not.toBeNull();
+    expect(insertedRuns).toBeNull();
+
+    const { data: updatedRuns, error: updateError } = await userSupabase
+      .from("ai_plan_runs")
+      .update({ model_name: "client-tamper" })
+      .eq("id", run?.id)
+      .select("id, model_name");
+
+    expect(Boolean(updateError) || updatedRuns?.length === 0).toBe(true);
+
+    const adminSupabase = createAdminClient();
+    const { data: persistedRun, error: persistedRunError } = await adminSupabase
+      .from("ai_plan_runs")
+      .select("model_name")
+      .eq("id", run?.id)
+      .single();
+
+    expect(persistedRunError).toBeNull();
+    expect(persistedRun?.model_name).toBe("fixture");
   });
 
   test("SAFETY-001/002: critical-risk acknowledgement persists after refresh", async ({ page }) => {
