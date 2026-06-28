@@ -1,0 +1,164 @@
+name: Nexus CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  SUPABASE_CLI_VERSION: 2.108.0
+
+jobs:
+  static-gates:
+    name: Static gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check direct dependency specs are pinned
+        run: |
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          const failures = [];
+
+          for (const section of ["dependencies", "devDependencies"]) {
+            for (const [name, spec] of Object.entries(pkg[section] || {})) {
+              if (spec === "latest" || /^[~^]/.test(spec)) {
+                failures.push(`${section}.${name}=${spec}`);
+              }
+            }
+          }
+
+          if (failures.length) {
+            console.error("Unpinned direct dependency specs found:");
+            for (const failure of failures) console.error(`- ${failure}`);
+            process.exit(1);
+          }
+          NODE
+
+      - name: Audit high and critical vulnerabilities
+        run: npm audit --audit-level=high
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+  e2e-local-supabase:
+    name: E2E with local Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start Supabase local
+        run: npx supabase@${SUPABASE_CLI_VERSION} start
+
+      - name: Apply Supabase migrations
+        run: npx supabase@${SUPABASE_CLI_VERSION} migration up --local
+
+      - name: Create fixture environment
+        run: |
+          npx supabase@${SUPABASE_CLI_VERSION} status -o json > supabase-status.json
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const status = JSON.parse(fs.readFileSync("supabase-status.json", "utf8"));
+          const required = ["API_URL", "ANON_KEY", "SERVICE_ROLE_KEY"];
+          const missing = required.filter((key) => !status[key]);
+
+          if (missing.length) {
+            console.error(`Missing Supabase status fields: ${missing.join(", ")}`);
+            process.exit(1);
+          }
+
+          fs.writeFileSync(
+            ".env.local",
+            [
+              `NEXT_PUBLIC_SUPABASE_URL=${status.API_URL}`,
+              `NEXT_PUBLIC_SUPABASE_ANON_KEY=${status.ANON_KEY}`,
+              `SUPABASE_SERVICE_ROLE_KEY=${status.SERVICE_ROLE_KEY}`,
+              "NEXUS_AI_PROVIDER=fixture",
+              "NEXUS_FIXTURE_SCENARIO=auto",
+              "E2E_BASE_URL=http://localhost:3001",
+              "E2E_USER_A_EMAIL=user-a@example.test",
+              "E2E_USER_A_PASSWORD=Password123!",
+              "E2E_USER_B_EMAIL=user-b@example.test",
+              "E2E_USER_B_PASSWORD=Password123!",
+              ""
+            ].join("\n")
+          );
+          NODE
+
+      - name: Start app on 3001
+        run: |
+          npm run dev:3001 > next-dev.log 2>&1 &
+          echo $! > next.pid
+
+          for attempt in {1..60}; do
+            if curl -fsS http://localhost:3001 >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          cat next-dev.log
+          exit 1
+
+      - name: Run E2E
+        env:
+          E2E_BASE_URL: http://localhost:3001
+        run: npm run test:e2e:local
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-ci-failure-artifacts
+          if-no-files-found: ignore
+          path: |
+            next-dev.log
+            test-results/
+            playwright-report/
+
+      - name: Stop app
+        if: always()
+        run: |
+          if [ -f next.pid ]; then
+            kill "$(cat next.pid)" || true
+          fi
+
+      - name: Stop Supabase local
+        if: always()
+        run: npx supabase@${SUPABASE_CLI_VERSION} stop
