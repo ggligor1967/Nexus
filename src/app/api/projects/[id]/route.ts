@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getOwnedProject, requireApiUser } from "@/lib/auth/guards";
+import { NexusPlanSchema } from "@/lib/ai/schema";
 import { z } from "zod";
 
 const UpdateProjectSchema = z.object({
@@ -61,6 +62,35 @@ export async function PATCH(
   if (parsed.data.title !== undefined) update.title = parsed.data.title;
   if (parsed.data.description !== undefined) update.description = parsed.data.description;
   if (parsed.data.buildReadyAcknowledged !== undefined) {
+    if (parsed.data.buildReadyAcknowledged) {
+      const { data: latestRun, error: latestRunError } = await supabase
+        .from("ai_plan_runs")
+        .select("plan_json")
+        .eq("project_id", id)
+        .eq("status", "completed")
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestRunError) {
+        return NextResponse.json(
+          { error: "Could not verify completed plan.", details: latestRunError.message },
+          { status: 500 }
+        );
+      }
+
+      const validPlan = latestRun?.plan_json
+        ? NexusPlanSchema.safeParse(latestRun.plan_json)
+        : null;
+
+      if (!validPlan?.success) {
+        return NextResponse.json(
+          { error: "Build-ready acknowledgement requires a completed validated plan." },
+          { status: 409 }
+        );
+      }
+    }
+
     update.build_ready_acknowledged = parsed.data.buildReadyAcknowledged;
   }
 

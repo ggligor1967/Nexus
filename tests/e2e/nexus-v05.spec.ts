@@ -185,6 +185,50 @@ test.describe("Nexus v0.5 core flow", () => {
     expect(exportResponse.status()).toBe(404);
   });
 
+  test("SEC-002: build-ready acknowledgement requires a completed validated plan", async ({ page }) => {
+    await signUpOrLogin(page, userA);
+    const projectId = await createProject(page, `Build Ready Guard ${Date.now()}`);
+
+    const blockedResponse = await page.request.patch(`/api/projects/${projectId}`, {
+      data: {
+        buildReadyAcknowledged: true
+      }
+    });
+
+    expect(blockedResponse.status()).toBe(409);
+    await expect(blockedResponse.json()).resolves.toMatchObject({
+      error: "Build-ready acknowledgement requires a completed validated plan."
+    });
+
+    const generateResponse = await page.request.post(`/api/projects/${projectId}/generate-plan`, {
+      data: {
+        rawConcept:
+          "A planning workspace that helps small teams turn rough product ideas into validated implementation plans with clear safeguards and exportable artifacts.",
+        platform: ["web"],
+        language: "en",
+        riskDomain: "general",
+        outputType: "full_prd",
+        constraints: {}
+      }
+    });
+
+    expect(generateResponse.status()).toBe(200);
+
+    const allowedResponse = await page.request.patch(`/api/projects/${projectId}`, {
+      data: {
+        buildReadyAcknowledged: true
+      }
+    });
+
+    expect(allowedResponse.status()).toBe(200);
+    await expect(allowedResponse.json()).resolves.toMatchObject({
+      project: {
+        id: projectId,
+        build_ready_acknowledged: true
+      }
+    });
+  });
+
   test("SAFETY-001/002: critical-risk acknowledgement persists after refresh", async ({ page }) => {
     await signUpOrLogin(page, userA);
     await createProject(page, `Critical Risk ${Date.now()}`);
