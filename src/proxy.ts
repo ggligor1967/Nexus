@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const protectedPrefixes = ["/dashboard", "/projects"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
     request
   });
