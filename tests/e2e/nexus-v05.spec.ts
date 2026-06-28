@@ -318,6 +318,30 @@ test.describe("Nexus v0.5 core flow", () => {
     expect(persistedRun?.model_name).toBe("fixture");
   });
 
+  test("EXPORT-CONTENT: markdown has escaped frontmatter, constraints, risk callout, numbered option", async ({ page }) => {
+    await signUpOrLogin(page, userA);
+    const projectId = await createProject(page, `Export "Quote" ${Date.now()}`);
+
+    await page.getByTestId("raw-concept-input").fill(
+      "A simple to-do app for students who forget deadlines and need a structured plan with reminders, ethical safeguards, and a clear MVP boundary."
+    );
+    await page.getByTestId("generate-plan-button").click();
+    await expect(page.getByText("Product Thesis")).toBeVisible();
+
+    const res = await page.request.post(`/api/projects/${projectId}/export/markdown`);
+    expect(res.status()).toBe(200);
+    const md = await res.text();
+
+    expect(md).toContain('format: "nexus-markdown-v1"');
+    expect(md).toContain('source: "validated_plan_json"');
+    expect(md).toContain('model: "fixture"');
+    expect(md).toContain("### 2.4 Constraints");
+    expect(md).toMatch(/> \*\*Risk Level: (LOW|MEDIUM|HIGH|CRITICAL)\*\*/);
+    expect(md).toContain("### Option 1 —");
+    // title with embedded double-quote is escaped in YAML frontmatter
+    expect(md).toContain('title: "Export \\"Quote\\"');
+  });
+
   test("SAFETY-001/002: critical-risk acknowledgement persists after refresh", async ({ page }) => {
     await signUpOrLogin(page, userA);
     await createProject(page, `Critical Risk ${Date.now()}`);

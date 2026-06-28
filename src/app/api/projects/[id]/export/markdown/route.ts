@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { NexusPlanSchema } from "@/lib/ai/schema";
-import { planToMarkdown, sanitizeFilename } from "@/lib/export/markdown";
+import { planToMarkdown, sanitizeFilename, type ExportMeta } from "@/lib/export/markdown";
 import { getOwnedProject, requireApiUser } from "@/lib/auth/guards";
 
 export async function POST(
@@ -39,7 +39,14 @@ export async function POST(
   }
 
   const validatedPlan = NexusPlanSchema.parse(latestRun.plan_json);
-  const markdown = planToMarkdown(project.title, validatedPlan);
+
+  const meta: ExportMeta = {
+    exportedAt: latestRun.completed_at, // persisted; a completed run always has completed_at
+    modelName: latestRun.model_name,    // persisted
+    riskLevel: validatedPlan.ethicalRiskReport.overallRiskLevel
+  };
+
+  const markdown = planToMarkdown(project.title, validatedPlan, meta);
   const filename = `${sanitizeFilename(project.title)}.md`;
 
   const { error: exportError } = await supabase.from("exported_plans").insert({

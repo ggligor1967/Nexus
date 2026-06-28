@@ -1,41 +1,81 @@
-import type { NexusPlan } from "@/types/nexus";
+import type { NexusPlan, RiskLevel } from "@/types/nexus";
+
+export interface ExportMeta {
+  exportedAt: string;
+  modelName: string;
+  riskLevel: RiskLevel;
+}
 
 function list(items: string[]): string {
   return items.map((item) => `- ${item}`).join("\n");
 }
 
-export function planToMarkdown(projectName: string, plan: NexusPlan): string {
-  return `# ${projectName}
+// Emit a double-quoted YAML scalar; escape backslash and quote, flatten newlines.
+function yamlString(value: string): string {
+  const escaped = value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\r?\n/g, " ");
+  return `"${escaped}"`;
+}
 
-## Product Thesis
+export function planToMarkdown(
+  projectName: string,
+  plan: NexusPlan,
+  meta: ExportMeta
+): string {
+  const heading = projectName.replace(/\r?\n/g, " ");
+  const riskUpper = meta.riskLevel.toUpperCase();
+
+  return `---
+title: ${yamlString(projectName)}
+exported_at: ${yamlString(meta.exportedAt)}
+risk_level: ${yamlString(meta.riskLevel)}
+model: ${yamlString(meta.modelName)}
+format: ${yamlString("nexus-markdown-v1")}
+source: ${yamlString("validated_plan_json")}
+---
+
+# ${heading}
+
+> **Risk Level: ${riskUpper}**
+> Review safeguards and red lines before marking this plan build-ready.
+
+## 1. Product Thesis
 
 ${plan.productThesis}
 
-## User Problems
+## 2. Deconstruction
+
+### 2.1 User Problems
 
 ${list(plan.deconstruction.userProblems)}
 
-## Target Audience
+### 2.2 Target Audience
 
 ${list(plan.deconstruction.targetAudience)}
 
-## Jobs To Be Done
+### 2.3 Jobs To Be Done
 
 ${list(plan.deconstruction.jobsToBeDone)}
 
-## Assumptions
+### 2.4 Constraints
+
+${list(plan.deconstruction.constraints)}
+
+### 2.5 Assumptions
 
 ${list(plan.deconstruction.assumptions)}
 
-## Unknowns
+### 2.6 Unknowns
 
 ${list(plan.deconstruction.unknowns)}
 
-## Success Metrics
+### 2.7 Success Metrics
 
 ${list(plan.deconstruction.successMetrics)}
 
-## Product Strategy
+## 3. Product Strategy
 
 **Positioning:** ${plan.strategy.positioning}
 
@@ -43,20 +83,19 @@ ${list(plan.deconstruction.successMetrics)}
 
 **Core Value Proposition:** ${plan.strategy.coreValueProposition}
 
-## MVP Boundary
+### MVP Boundary
 
 ${list(plan.strategy.mvpBoundary)}
 
-## Non-Goals
+### Non-Goals
 
 ${list(plan.strategy.nonGoals)}
 
-## Prototype Options
+## 4. Prototype Options
 
 ${plan.prototypeOptions
   .map(
-    (option, index) => `
-### ${index + 1}. ${option.title}
+    (option, index) => `### Option ${index + 1} — ${option.title}
 
 **Type:** ${option.type}
 
@@ -79,7 +118,7 @@ ${option.whyThisOption}
   )
   .join("\n")}
 
-## Ethical Risk Report
+## 5. Ethical Risk Report
 
 **Overall Risk Level:** ${plan.ethicalRiskReport.overallRiskLevel}
 
@@ -111,7 +150,7 @@ ${list(plan.ethicalRiskReport.safeguards)}
 
 ${list(plan.ethicalRiskReport.redLines)}
 
-## Roadmap
+## 6. Roadmap
 
 ### Phase 1
 
@@ -125,7 +164,7 @@ ${list(plan.roadmap.phase2)}
 
 ${list(plan.roadmap.phase3)}
 
-## Build-Ready Checklist
+## 7. Build-Ready Checklist
 
 - [ ] Concept validated
 - [ ] MVP boundary accepted
