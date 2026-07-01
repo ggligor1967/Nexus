@@ -15,11 +15,13 @@ function List({ items }: { items: string[] }) {
 export default function GeneratedPlanView({
   projectId,
   plan,
-  buildReadyAcknowledged
+  buildReadyAcknowledged,
+  readOnly = false
 }: {
   projectId: string;
   plan: NexusPlan;
   buildReadyAcknowledged: boolean;
+  readOnly?: boolean;
 }) {
   return (
     <section className="stack">
@@ -64,6 +66,7 @@ export default function GeneratedPlanView({
         projectId={projectId}
         report={plan.ethicalRiskReport}
         initialAcknowledged={buildReadyAcknowledged}
+        readOnly={readOnly}
       />
 
       <article className="card">

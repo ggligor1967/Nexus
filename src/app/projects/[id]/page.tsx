@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import ConceptIntakeForm from "@/components/ConceptIntakeForm";
+import ConceptIntakeForm, {
+  type ConceptIntakeInitialValues
+} from "@/components/ConceptIntakeForm";
 import GeneratedPlanView from "@/components/GeneratedPlanView";
 import ExportActions from "@/components/ExportActions";
-import type { AIPlanRun, Project } from "@/types/nexus";
+import RevisionHistoryPanel from "@/components/RevisionHistoryPanel";
+import RegeneratePanel from "@/components/RegeneratePanel";
+import type { AIPlanRun, Project, Revision } from "@/types/nexus";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +39,8 @@ export default async function ProjectDetailPage({
     notFound();
   }
 
-  const { data: latestRun } = await supabase
+  // latestRun (any status) drives ONLY the failure banner.
+  const { data: latestRunData } = await supabase
     .from("ai_plan_runs")
     .select("*")
     .eq("project_id", id)
@@ -43,8 +48,47 @@ export default async function ProjectDetailPage({
     .limit(1)
     .maybeSingle();
 
+  // latestCompletedRun drives the visible plan/export/revision panel.
+  const { data: latestCompletedRunData } = await supabase
+    .from("ai_plan_runs")
+    .select("*")
+    .eq("project_id", id)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: revisionsData } = await supabase
+    .from("revisions")
+    .select("*")
+    .eq("project_id", id)
+    .order("created_at", { ascending: false });
+
+  const { data: latestConceptData } = await supabase
+    .from("concept_inputs")
+    .select("*")
+    .eq("project_id", id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const typedProject = project as Project;
-  const run = latestRun as AIPlanRun | null;
+  const latestRun = latestRunData as AIPlanRun | null;
+  const latestCompletedRun = latestCompletedRunData as AIPlanRun | null;
+  const revisions = (revisionsData ?? []) as Revision[];
+
+  const initialValues: ConceptIntakeInitialValues | undefined = latestConceptData
+    ? {
+        rawConcept: latestConceptData.raw_concept ?? "",
+        targetUsers: latestConceptData.target_users ?? "",
+        platform: latestConceptData.platform ?? ["web"],
+        language: typedProject.language,
+        riskDomain: latestConceptData.risk_domain ?? "general",
+        outputType: latestConceptData.output_type ?? "full_prd"
+      }
+    : undefined;
+
+  const showFailureBanner = latestRun?.status === "failed";
 
   return (
     <main>
@@ -63,24 +107,29 @@ export default async function ProjectDetailPage({
         </Link>
       </div>
 
-      {run?.status === "failed" ? (
-        <section className="card error">
-          <h2>Generation failed</h2>
-          <p>{run.error_message ?? "The generated plan did not match the required structure."}</p>
+      {showFailureBanner ? (
+        <section className="card error" data-testid="generation-failure-banner">
+          <h2>Last generation failed</h2>
+          <p>
+            {latestRun?.error_message ??
+              "The latest generated plan did not match the required structure."}
+          </p>
         </section>
       ) : null}
 
-      {run?.status === "completed" && run.plan_json ? (
+      {latestCompletedRun?.plan_json ? (
         <>
           <GeneratedPlanView
             projectId={typedProject.id}
-            plan={run.plan_json}
+            plan={latestCompletedRun.plan_json}
             buildReadyAcknowledged={typedProject.build_ready_acknowledged}
           />
           <ExportActions projectId={typedProject.id} />
+          <RevisionHistoryPanel projectId={typedProject.id} revisions={revisions} />
+          <RegeneratePanel projectId={typedProject.id} initialValues={initialValues} />
         </>
       ) : (
-        <ConceptIntakeForm projectId={typedProject.id} />
+        <ConceptIntakeForm projectId={typedProject.id} initialValues={initialValues} />
       )}
     </main>
   );

@@ -252,6 +252,24 @@ test.describe("Nexus v0.5 core flow", () => {
     });
   });
 
+  test("REV-SEC-001: client cannot directly insert revisions", async ({ page }) => {
+    await signUpOrLogin(page, userA);
+    const projectId = await createProject(page, `Rev Insert Guard ${Date.now()}`);
+
+    const userSupabase = await createUserSupabaseClient(userA);
+    const { data: insertedRev, error: insertError } = await userSupabase
+      .from("revisions")
+      .insert({
+        project_id: projectId,
+        revision_note: "client-direct",
+        new_snapshot: {}
+      })
+      .select("id");
+
+    expect(insertError).not.toBeNull();
+    expect(insertedRev).toBeNull();
+  });
+
   test("SEC-003: client can read own AI runs but cannot write them directly", async ({ page }) => {
     await signUpOrLogin(page, userA);
     const projectId = await createProject(page, `AI Run RLS ${Date.now()}`);
@@ -342,6 +360,154 @@ test.describe("Nexus v0.5 core flow", () => {
     expect(md).toContain('title: "Export \\"Quote\\"');
   });
 
+  test("REV-001: first generation creates no revision; second creates one with differing snapshots", async ({ page }) => {
+    await signUpOrLogin(page, userA);
+    const projectId = await createProject(page, `Rev Write ${Date.now()}`);
+
+    const gen1 = await page.request.post(`/api/projects/${projectId}/generate-plan`, {
+      data: {
+        rawConcept:
+          "A focused planning workspace that turns a messy student to-do concept into a validated, ethical MVP plan with a clear boundary and safeguards.",
+        platform: ["web"], language: "en", riskDomain: "general", outputType: "full_prd", constraints: {}
+      }
+    });
+    expect(gen1.status()).toBe(200);
+
+    const supabase = createAdminClient();
+    const { data: afterFirst } = await supabase
+      .from("revisions").select("id").eq("project_id", projectId);
+    expect(afterFirst).toHaveLength(0);
+
+    const gen2 = await page.request.post(`/api/projects/${projectId}/generate-plan`, {
+      data: {
+        rawConcept:
+          "A productivity tracker that monitors employee activity and reports suspicious behavior to managers using AI-driven alerts and risk scoring.",
+        platform: ["web", "ai"], language: "en", riskDomain: "surveillance", outputType: "full_prd", constraints: {}
+      }
+    });
+    expect(gen2.status()).toBe(200);
+
+    await expect
+      .poll(async () => {
+        const { data } = await supabase
+          .from("revisions")
+          .select("ai_plan_run_id, revision_note")
+          .eq("project_id", projectId)
+          .limit(1);
+        return data?.[0] ?? null;
+      })
+      .toMatchObject({
+        revision_note: "Plan regenerated",
+        ai_plan_run_id: expect.any(String)
+      });
+
+    const { data: revRows } = await supabase
+      .from("revisions")
+      .select("previous_snapshot, new_snapshot")
+      .eq("project_id", projectId)
+      .limit(1);
+    const rev = revRows![0];
+    expect(rev.previous_snapshot.ethicalRiskReport.overallRiskLevel)
+      .not.toBe(rev.new_snapshot.ethicalRiskReport.overallRiskLevel);
+
+    const { data: allRevRows } = await supabase
+      .from("revisions")
+      .select("id")
+      .eq("project_id", projectId);
+    expect(allRevRows).toHaveLength(1);
+  });
+
+  test("REV-002/TEST: invalid_json regeneration creates no revision", async ({ page }) => {
+    await signUpOrLogin(page, userA);
+    const projectId = await createProject(page, `Rev Invalid ${Date.now()}`);
+
+    const gen1 = await page.request.post(`/api/projects/${projectId}/generate-plan`, {
+      data: {
+        rawConcept:
+          "A reliable planning assistant that creates validated product artifacts for teams while keeping a server-controlled audit trail of plan runs.",
+        platform: ["web"], language: "en", riskDomain: "general", outputType: "full_prd", constraints: {}
+      }
+    });
+    expect(gen1.status()).toBe(200);
+
+    const genInvalid = await page.request.post(`/api/projects/${projectId}/generate-plan`, {
+      data: {
+        rawConcept:
+          "A valid product planning concept that deliberately includes invalid_json to exercise deterministic fixture failure handling and schema rejection.",
+        platform: ["web"], language: "en", riskDomain: "general", outputType: "full_prd", constraints: {}
+      }
+    });
+    expect(genInvalid.status()).toBe(422);
+
+    const supabase = createAdminClient();
+    const { data: revs } = await supabase
+      .from("revisions").select("id").eq("project_id", projectId);
+    expect(revs).toHaveLength(0);
+  });
+
+  test("REV-PAGE-001: completed plan and revision panel survive a failed regeneration", async ({ page }) => {
+    await signUpOrLogin(page, userA);
+    const projectId = await createProject(page, `Rev Page Survive ${Date.now()}`);
+
+    await page.getByTestId("raw-concept-input").fill(
+      "A focused planning workspace that turns a messy student to-do concept into a validated, ethical MVP plan with a clear boundary and safeguards."
+    );
+    await page.getByTestId("generate-plan-button").click();
+    await expect(page.getByText("Product Thesis")).toBeVisible();
+    await expect(page.getByTestId("revision-history-panel")).toBeVisible();
+
+    // Force a failed regeneration via API, then reload.
+    const genInvalid = await page.request.post(`/api/projects/${projectId}/generate-plan`, {
+      data: {
+        rawConcept:
+          "A valid product planning concept that deliberately includes invalid_json to exercise deterministic fixture failure handling and schema rejection.",
+        platform: ["web"], language: "en", riskDomain: "general", outputType: "full_prd", constraints: {}
+      }
+    });
+    expect(genInvalid.status()).toBe(422);
+
+    await page.reload();
+
+    // The good completed plan is still shown, with a failure banner above it.
+    await expect(page.getByText("Product Thesis")).toBeVisible();
+    await expect(page.getByTestId("revision-history-panel")).toBeVisible();
+    await expect(page.getByTestId("generation-failure-banner")).toBeVisible();
+  });
+
+  test("REV-UI-001: regenerate via UI creates a revision; snapshot route renders both versions read-only", async ({ page }) => {
+    test.setTimeout(180_000); // two full UI generate cycles + snapshot cold-compile on disk-pressured box
+    await signUpOrLogin(page, userA);
+    const projectId = await createProject(page, `Rev UI ${Date.now()}`);
+
+    // gen1 (standard) via UI
+    await page.getByTestId("raw-concept-input").fill(
+      "A focused planning workspace that turns a messy student to-do concept into a validated, ethical MVP plan with a clear boundary and safeguards."
+    );
+    await page.getByTestId("generate-plan-button").click();
+    await expect(page.getByText("Product Thesis")).toBeVisible();
+    await expect(page.getByTestId("revision-history-panel")).toBeVisible();
+    await expect(page.getByTestId("revision-row")).toHaveCount(0);
+
+    // gen2 (surveillance -> critical) via the UI regenerate path
+    await page.getByTestId("regenerate-plan-button").click();
+    await page.getByTestId("risk-domain-select").selectOption("surveillance");
+    await page.getByTestId("raw-concept-input").fill(
+      "A productivity tracker that monitors employee activity and reports suspicious behavior to managers using AI-driven alerts and risk scoring."
+    );
+    await page.getByTestId("generate-plan-button").click();
+
+    await expect(page.getByText(/Overall risk level:\s*critical/i)).toBeVisible();
+    await expect(page.getByTestId("revision-row")).toHaveCount(1);
+
+    // Open the snapshot detail route
+    await page.getByTestId("view-snapshot-link").first().click();
+    await expect(page).toHaveURL(/\/projects\/.+\/revisions\/.+/);
+    await expect(page.getByTestId("revision-previous-snapshot")).toBeVisible();
+    await expect(page.getByTestId("revision-new-snapshot")).toBeVisible();
+    // read-only: no acknowledgement control anywhere on the snapshot route
+    await expect(page.getByTestId("mark-build-ready-button")).toHaveCount(0);
+  });
+
   test("SAFETY-001/002: critical-risk acknowledgement persists after refresh", async ({ page }) => {
     await signUpOrLogin(page, userA);
     await createProject(page, `Critical Risk ${Date.now()}`);
@@ -398,6 +564,44 @@ test.describe("Nexus v0.5 RLS isolation proof", () => {
 
     const exportResponse = await pageB.request.post(`/api/projects/${projectId}/export/markdown`);
     expect(exportResponse.status()).toBe(404);
+
+    await contextA.close();
+    await contextB.close();
+  });
+
+  test("REV-RLS-001: user B cannot open user A revision snapshot route", async ({ browser }) => {
+    test.setTimeout(180_000); // two signUpOrLogin contexts + API calls + snapshot cold-compile on disk-pressured box
+    const contextA = await browser.newContext();
+    const pageA = await contextA.newPage();
+
+    await signUpOrLogin(pageA, userA);
+    const projectId = await createProject(pageA, `Rev RLS ${Date.now()}`);
+
+    for (const concept of [
+      "A planning workspace turning a rough idea into a validated ethical MVP plan with safeguards and a clear boundary for small teams.",
+      "A second revised concept that adjusts the plan scope while preserving validated structure and ethical safeguards for the same workspace."
+    ]) {
+      const r = await pageA.request.post(`/api/projects/${projectId}/generate-plan`, {
+        data: {
+          rawConcept: concept,
+          platform: ["web"], language: "en", riskDomain: "general", outputType: "full_prd", constraints: {}
+        }
+      });
+      expect(r.status()).toBe(200);
+    }
+
+    const adminSupabase = createAdminClient();
+    const { data: revs } = await adminSupabase
+      .from("revisions").select("id").eq("project_id", projectId).limit(1);
+    const revisionId = revs?.[0]?.id;
+    expect(revisionId).toBeTruthy();
+
+    const contextB = await browser.newContext();
+    const pageB = await contextB.newPage();
+    await signUpOrLogin(pageB, userB);
+
+    await pageB.goto(`/projects/${projectId}/revisions/${revisionId}`);
+    await expect(pageB.getByText(/404|not found/i)).toBeVisible();
 
     await contextA.close();
     await contextB.close();

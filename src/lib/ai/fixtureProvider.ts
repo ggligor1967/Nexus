@@ -14,7 +14,6 @@ function inferScenario(prompt: string): "standard" | "critical" | "invalid_json"
   }
 
   if (
-    value.includes("surveillance") ||
     value.includes("employee activity") ||
     value.includes("suspicious behavior") ||
     value.includes('"riskdomain": "surveillance"') ||

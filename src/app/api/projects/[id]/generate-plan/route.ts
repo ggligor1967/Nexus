@@ -6,6 +6,7 @@ import { generatePlanFromAI } from "@/lib/ai/generatePlan";
 import { getAIProviderName } from "@/lib/ai/provider";
 import { createAdminSupabaseClient, createServerSupabaseClient } from "@/lib/supabase/server";
 import { getOwnedProject, requireApiUser } from "@/lib/auth/guards";
+import type { NexusPlan } from "@/types/nexus";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,17 @@ export async function POST(
   if (!project) {
     return NextResponse.json({ error: "Project not found." }, { status: 404 });
   }
+
+  const { data: previousCompletedRun } = await supabase
+    .from("ai_plan_runs")
+    .select("plan_json")
+    .eq("project_id", projectId)
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const previousPlan = (previousCompletedRun?.plan_json as NexusPlan | null) ?? null;
 
   const body = await req.json();
   const parsedInput = ConceptInputSchema.safeParse(body);
@@ -122,6 +134,21 @@ export async function POST(
       })
       .eq("id", projectId)
       .eq("user_id", auth.user.id);
+
+    if (previousPlan) {
+      const { error: revisionError } = await adminSupabase.from("revisions").insert({
+        project_id: projectId,
+        ai_plan_run_id: run.id,
+        previous_snapshot: previousPlan,
+        new_snapshot: validatedPlan,
+        revision_note: "Plan regenerated"
+      });
+
+      if (revisionError) {
+        // Non-fatal: a completed, validated generation must not become a 500.
+        console.error("Revision insert failed (non-fatal):", revisionError.message);
+      }
+    }
 
     return NextResponse.json({
       runId: run.id,
