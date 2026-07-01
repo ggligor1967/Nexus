@@ -5,15 +5,30 @@ import { FormEvent, useState } from "react";
 
 const platformOptions = ["web", "mobile", "windows", "ai", "other"] as const;
 
-export default function ConceptIntakeForm({ projectId }: { projectId: string }) {
+export interface ConceptIntakeInitialValues {
+  rawConcept?: string;
+  targetUsers?: string;
+  platform?: string[];
+  language?: string;
+  riskDomain?: string;
+  outputType?: string;
+}
+
+export default function ConceptIntakeForm({
+  projectId,
+  initialValues
+}: {
+  projectId: string;
+  initialValues?: ConceptIntakeInitialValues;
+}) {
   const router = useRouter();
 
-  const [rawConcept, setRawConcept] = useState("");
-  const [targetUsers, setTargetUsers] = useState("");
-  const [platform, setPlatform] = useState<string[]>(["web"]);
-  const [language, setLanguage] = useState("en");
-  const [riskDomain, setRiskDomain] = useState("general");
-  const [outputType, setOutputType] = useState("full_prd");
+  const [rawConcept, setRawConcept] = useState(initialValues?.rawConcept ?? "");
+  const [targetUsers, setTargetUsers] = useState(initialValues?.targetUsers ?? "");
+  const [platform, setPlatform] = useState<string[]>(initialValues?.platform ?? ["web"]);
+  const [language, setLanguage] = useState(initialValues?.language ?? "en");
+  const [riskDomain, setRiskDomain] = useState(initialValues?.riskDomain ?? "general");
+  const [outputType, setOutputType] = useState(initialValues?.outputType ?? "full_prd");
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setGenerating] = useState(false);
 

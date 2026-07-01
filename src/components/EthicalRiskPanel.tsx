@@ -19,11 +19,13 @@ function List({ items }: { items: string[] }) {
 export default function EthicalRiskPanel({
   projectId,
   report,
-  initialAcknowledged
+  initialAcknowledged,
+  readOnly = false
 }: {
   projectId: string;
   report: Report;
   initialAcknowledged: boolean;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [acknowledged, setAcknowledged] = useState(initialAcknowledged);
@@ -101,7 +103,7 @@ export default function EthicalRiskPanel({
       <h3>Red lines</h3>
       <List items={report.redLines} />
 
-      {isCritical ? (
+      {!readOnly && isCritical ? (
         <label className="row">
           <input
             type="checkbox"
@@ -116,27 +118,29 @@ export default function EthicalRiskPanel({
 
       {error ? <p className="card error">{error}</p> : null}
 
-      <div className="row">
-        <button
-          type="button"
-          disabled={isSaving || (isCritical && !acknowledged)}
-          onClick={markBuildReady}
-          data-testid="mark-build-ready-button"
-        >
-          {isSaving ? "Saving..." : acknowledged ? "Build-ready acknowledged" : "Mark build-ready"}
-        </button>
-
-        {initialAcknowledged ? (
+      {!readOnly ? (
+        <div className="row">
           <button
             type="button"
-            className="secondary"
-            disabled={isSaving}
-            onClick={() => persistAcknowledgement(false)}
+            disabled={isSaving || (isCritical && !acknowledged)}
+            onClick={markBuildReady}
+            data-testid="mark-build-ready-button"
           >
-            Clear acknowledgement
+            {isSaving ? "Saving..." : acknowledged ? "Build-ready acknowledged" : "Mark build-ready"}
           </button>
-        ) : null}
-      </div>
+
+          {initialAcknowledged ? (
+            <button
+              type="button"
+              className="secondary"
+              disabled={isSaving}
+              onClick={() => persistAcknowledgement(false)}
+            >
+              Clear acknowledgement
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   );
 }

@@ -105,3 +105,13 @@ export interface AIPlanRun {
   created_at: string;
   completed_at: string | null;
 }
+
+export interface Revision {
+  id: string;
+  project_id: string;
+  ai_plan_run_id: string | null;
+  revision_note: string | null;
+  previous_snapshot: NexusPlan | null;
+  new_snapshot: NexusPlan | null;
+  created_at: string;
+}
