@@ -506,6 +506,14 @@ test.describe("Nexus v0.5 core flow", () => {
     await expect(page.getByTestId("revision-new-snapshot")).toBeVisible();
     // read-only: no acknowledgement control anywhere on the snapshot route
     await expect(page.getByTestId("mark-build-ready-button")).toHaveCount(0);
+
+    // v0.8 read-only diff: the panel renders and surfaces the risk-level change.
+    // Assert the diff appears and the new value is "critical"; do not assume the
+    // previous value beyond what the fixture guarantees.
+    await expect(page.getByTestId("revision-diff-panel")).toBeVisible();
+    await expect(page.getByTestId("diff-risk-level")).toContainText(/critical/i);
+    // still read-only: no restore/edit/build-ready mutation control in the diff panel
+    await expect(page.getByTestId("revision-diff-panel").getByRole("button")).toHaveCount(0);
   });
 
   test("SAFETY-001/002: critical-risk acknowledgement persists after refresh", async ({ page }) => {
