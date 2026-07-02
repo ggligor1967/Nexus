@@ -30,7 +30,7 @@ artifact/write paths; hosted CI green before promotion.
 
 ## What is non-blocking
 
-- **QA-001** — benign logout `ERR_ABORTED` console noise ([issue #2](https://github.com/ggligor1967/Nexus/issues/2)).
+- **QA-001** — benign logout `ERR_ABORTED` console noise — **resolved (closed, benign / won't-fix)** ([issue #2](https://github.com/ggligor1967/Nexus/issues/2)).
 - **CI-WARN-001** — GitHub Actions runtime deprecation annotations.
 - **SEC-001** — two **moderate** next→postcss advisories, risk-accepted (fix is a SemVer-major
   downgrade). `npm audit --audit-level=high` still passes.

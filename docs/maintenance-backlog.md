@@ -5,16 +5,20 @@ status, severity, whether it blocks, a link (where available), and acceptance cr
 
 ## QA-001 — logout `ERR_ABORTED` console noise
 
-- **Status:** OPEN.
+- **Status:** CLOSED — benign / won't-fix (not planned).
 - **Severity:** minor.
 - **Blocker:** no.
-- **Link:** [issue #2](https://github.com/ggligor1967/Nexus/issues/2).
-- **Detail:** `LogoutButton` calls `supabase.auth.signOut()` then immediately navigates to `/login`
-  with `router.refresh()`; the in-flight request can be aborted, logging a benign `ERR_ABORTED`.
+- **Link:** [issue #2](https://github.com/ggligor1967/Nexus/issues/2) (closed, not planned) ·
+  [closure comment](https://github.com/ggligor1967/Nexus/issues/2#issuecomment-4865452826).
+- **Detail:** `LogoutButton` calls `supabase.auth.signOut()` (awaited) and then navigates to
+  `/login` with `router.refresh()`. A benign `ERR_ABORTED` can appear in the browser console.
   Logout is correct and protected routes still redirect.
-- **Acceptance criteria:** logout produces no `ERR_ABORTED` console entry (e.g. await/settle the
-  sign-out before navigating, or otherwise sequence the request and redirect), with logout behavior
-  and the AUTH-00x E2E assertions unchanged.
+- **Resolution:** investigated and confirmed benign. `signOut()` is **already awaited** before
+  navigation; the redirect to `/login` succeeds and the session is cleared. The `ERR_ABORTED` is
+  the browser tearing down the completed/unconsumed logout response during the immediate
+  post-logout navigation — expected browser/navigation teardown noise, not an app fault. Closed as
+  won't-fix; **no code change** (`LogoutButton.tsx` unchanged), and the AUTH-00x E2E assertions
+  continue to pass.
 
 ## CI-WARN-001 — GitHub Actions runtime deprecation warnings
 

@@ -14,12 +14,15 @@ in "candidate future items" is approved or scheduled.
   revision history (model A); hardened `revisions` write path (migration `0003`); regenerate UI;
   read-only revision snapshot route. Promoted; hosted CI green.
   → [v0.7-promotion.md](v0.7-promotion.md)
+- **QA-001 — logout `ERR_ABORTED` noise: resolved (closed, benign / won't-fix).** Investigated and
+  confirmed benign browser/navigation teardown after a successful, awaited logout; no code change.
+  [issue #2](https://github.com/ggligor1967/Nexus/issues/2) ·
+  [closure comment](https://github.com/ggligor1967/Nexus/issues/2#issuecomment-4865452826). See
+  [maintenance-backlog.md](maintenance-backlog.md).
 
 ## Current (in flight)
 
-- **QA-001** — investigate the benign logout `ERR_ABORTED` console noise. Minor, non-blocking.
-  [issue #2](https://github.com/ggligor1967/Nexus/issues/2). See
-  [maintenance-backlog.md](maintenance-backlog.md).
+*Nothing currently in flight.*
 
 ## Not started
 

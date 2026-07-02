@@ -103,15 +103,19 @@ Markdown → regenerate → open a revision snapshot; then generate a surveillan
 the critical-risk acknowledgement gate. This mirrors the E2E coverage without code changes; see
 [getting-started.md](getting-started.md).
 
-## QA-001 — logout `ERR_ABORTED` (minor, non-blocking)
+## QA-001 — logout `ERR_ABORTED` (minor, non-blocking) — resolved
 
-Logging out (`LogoutButton`) calls `supabase.auth.signOut()` and immediately navigates to `/login`
-with `router.refresh()`. The in-flight sign-out request can be aborted by the navigation, producing
-a benign `ERR_ABORTED` entry in the browser console. It does not affect logout correctness (the
-session is cleared and protected routes redirect), and the E2E logout assertions pass.
+Logging out (`LogoutButton`) calls `supabase.auth.signOut()` (awaited) and then navigates to
+`/login` with `router.refresh()`. A benign `ERR_ABORTED` can appear in the browser console: the
+sign-out request is already awaited and completes, so the redirect to `/login` succeeds and the
+session is cleared — the entry is the browser tearing down the completed/unconsumed logout response
+during the immediate post-logout navigation. It does not affect logout correctness (the session is
+cleared and protected routes redirect), and the E2E logout assertions pass.
 
 - **Severity:** minor · **Blocker:** no.
-- **Tracking:** [issue #2](https://github.com/ggligor1967/Nexus/issues/2) (open).
+- **Status:** closed — benign / won't-fix (not planned); no code change.
+- **Tracking:** [issue #2](https://github.com/ggligor1967/Nexus/issues/2) (closed — benign /
+  won't-fix) · [closure comment](https://github.com/ggligor1967/Nexus/issues/2#issuecomment-4865452826).
 - See [maintenance-backlog.md](maintenance-backlog.md).
 
 ## Interpreting common failures

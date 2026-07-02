@@ -12,9 +12,11 @@ concepts into schema-validated, ethical, build-ready plans and exports them as M
 | **v0.7 (current)** | **PROMOTED — Artifact Quality + Revision UX** | [v0.7 promotion](v0.7-promotion.md) · [v0.7 planning](v0.7-planning.md) |
 
 - PR #1 merged to `main`; hosted CI on `main` is green.
-- **QA-001** (benign logout `ERR_ABORTED` console noise) is open as a **minor, non-blocking**
-  follow-up. See [maintenance backlog](maintenance-backlog.md) and
-  [issue #2](https://github.com/ggligor1967/Nexus/issues/2).
+- **QA-001** (benign logout `ERR_ABORTED` console noise) was investigated and **closed as benign /
+  won't-fix** (not planned) — a minor, non-blocking item, no code change. See
+  [maintenance backlog](maintenance-backlog.md),
+  [issue #2](https://github.com/ggligor1967/Nexus/issues/2), and its
+  [closure comment](https://github.com/ggligor1967/Nexus/issues/2#issuecomment-4865452826).
 - **v0.8 planning is not open** until a scope is explicitly approved. See [roadmap](roadmap.md).
 
 ## Quick links by audience
