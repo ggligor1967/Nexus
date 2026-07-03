@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import GeneratedPlanView from "@/components/GeneratedPlanView";
+import DiffView from "@/components/DiffView";
+import { diffPlans } from "@/lib/diff/plan";
 import type { NexusPlan } from "@/types/nexus";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +50,10 @@ export default async function RevisionSnapshotPage({
   const previous = revision.previous_snapshot as NexusPlan | null;
   const next = revision.new_snapshot as NexusPlan | null;
 
+  // Read-only, pure diff over the two already-loaded snapshots. The `previous && next`
+  // guard is load-bearing: with either snapshot missing there is nothing to compare.
+  const diff = previous && next ? diffPlans(previous, next) : null;
+
   return (
     <main>
       <div className="row" style={{ justifyContent: "space-between" }}>
@@ -56,6 +62,8 @@ export default async function RevisionSnapshotPage({
           Back to project
         </Link>
       </div>
+
+      {diff ? <DiffView diff={diff} /> : null}
 
       {previous ? (
         <section data-testid="revision-previous-snapshot">
