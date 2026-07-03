@@ -95,9 +95,9 @@ Each `revisions` row stores:
 - `revision_note` — `"Plan regenerated"`.
 
 > **Known, by design (model A):** regenerating from the *same* concept can produce
-> `previous_snapshot === new_snapshot` (fixture output is deterministic). This is expected and does
-> not require a diff. Tracked as a documented, non-blocking note — see
-> [maintenance-backlog.md](maintenance-backlog.md).
+> `previous_snapshot === new_snapshot` (fixture output is deterministic). This is expected; the
+> v0.8 read-only diff (below) simply renders its "No differences" empty state for such a revision.
+> Tracked as a documented, non-blocking note — see [maintenance-backlog.md](maintenance-backlog.md).
 
 ### Read-only snapshot route
 
@@ -106,10 +106,49 @@ renders both snapshots via `GeneratedPlanView` in `readOnly` mode — no acknowl
 build-ready controls appear. It performs an explicit ownership check (defense in depth alongside
 RLS); non-owners get the 404 page. Verified by `REV-UI-001` and `REV-RLS-001`.
 
-### Not in v0.7
+## Read-only revision diff / compare (v0.8)
+
+v0.8 adds a **read-only diff / compare** on top of the same revision snapshot page: a "What
+changed" panel that summarises the differences between the two snapshots, rendered **inline above**
+the full previous/new views. It is **view-only** — it computes and displays differences and does
+nothing else.
+
+### `diffPlans(previous, next)`
+
+The engine lives in `src/lib/diff/plan.ts` and is a **pure function**, mirroring the Markdown
+export's style: identical inputs always produce identical output (verified by the `diff-unit`
+spec). It performs no I/O, never mutates the input snapshots, and is safe to run in a server
+component. It returns a structured `PlanDiff`:
+
+- **scalar fields** (e.g. product thesis, positioning, overall risk level) → `{ before, after, changed }`;
+- **string arrays** (e.g. assumptions, roadmap phases, risks) → a **set-based, order-insensitive**
+  diff of `{ added, removed, unchanged, changed }` — reordering the same items is **not** a change;
+- **prototype options** → **index-paired** diffs; a count change surfaces added/removed options at the tail;
+- a top-level `hasAnyChange` that ORs every change signal.
+
+`exportablePlanMarkdown` is **excluded** from the diff — the same field the Markdown export leaves
+out — so the model-authored blob never appears in a diff (asserted by the `diff-unit` spec).
+
+### `DiffView`
+
+`src/components/DiffView.tsx` is a **read-only, presentational** component: no state, no data
+fetching, and **no controls**. Unchanged sections are omitted for signal; when `hasAnyChange` is
+false it renders an explicit "No differences between these two versions" empty state
+(`data-testid="revision-diff-panel"`).
+
+### Inline render
+
+The snapshot route computes the diff over the two already-loaded snapshots and renders `<DiffView>`
+above the previous/new sections, guarded by `previous && next` (with either snapshot missing there
+is nothing to compare). **No new route, no new query, no new access path** — the diff reuses the
+same ownership-checked page load.
+
+### Not in v0.8
 
 - **No restore** — you cannot roll a project back to a previous snapshot.
-- **No diff/compare engine** — snapshots are shown in full, not as a computed diff.
+- **No diff export / download** — the diff is view-only inline; it is not persisted or exported.
+- **No mutation** — the diff reads two persisted snapshots and changes nothing (no DB/RLS/write-path
+  changes; `revisions` remain server/service-role-written and immutable from the client).
 
 These are future candidates only; see [roadmap.md](roadmap.md).
 

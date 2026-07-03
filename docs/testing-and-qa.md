@@ -10,9 +10,11 @@ run against a local Supabase stack in **fixture** mode. This page documents the 
 
 ## Test files
 
-- `tests/e2e/nexus-v05.spec.ts` — 15 end-to-end scenarios (core flow + RLS isolation).
+- `tests/e2e/nexus-v05.spec.ts` — end-to-end scenarios (core flow + RLS isolation), including the
+  v0.8 diff assertions added to `REV-UI-001`.
 - `tests/e2e/markdown-unit.spec.ts` — 5 pure-function checks for `planToMarkdown` (run through
   the Playwright runner but requiring no browser/DB).
+- `tests/e2e/diff-unit.spec.ts` — 8 pure-function checks for `diffPlans` (v0.8; no browser/DB).
 
 ## E2E matrix
 
@@ -31,7 +33,7 @@ run against a local Supabase stack in **fixture** mode. This page documents the 
 | REV-001 | First generation creates no revision; a second (differing) generation creates exactly one, with differing snapshots. |
 | REV-002/TEST | An `invalid_json` regeneration creates no revision. |
 | REV-PAGE-001 | A completed plan and the revision panel survive a failed regeneration (failure banner shown, good plan retained). |
-| REV-UI-001 | Regenerating via the UI creates one revision; the snapshot route renders both versions read-only (no build-ready control). |
+| REV-UI-001 | Regenerating via the UI creates one revision; the snapshot route renders both versions read-only (no build-ready control). **v0.8:** also asserts the diff panel (`revision-diff-panel`) is visible, the risk-level change surfaces `critical` (`diff-risk-level`), and the panel stays read-only (zero buttons). |
 | SAFETY-001/002 | A critical-risk plan disables build-ready until acknowledgement; the acknowledgement persists after refresh. |
 
 > **Note:** `REV-UI-001` sets `test.setTimeout(180_000)` because it drives the full UI regenerate +
@@ -44,7 +46,7 @@ run against a local Supabase stack in **fixture** mode. This page documents the 
 | ID | What it verifies |
 |---|---|
 | RLS-002/003/004 | User B cannot open, generate under, or export user A's project (404 page / `404` responses). |
-| REV-RLS-001 | User B cannot open user A's revision snapshot route (404 page). |
+| REV-RLS-001 | User B cannot open user A's revision snapshot route (404 page). **v0.8:** the diff is rendered inline on this same route, so this test continues to cover non-owner access to the diff — no new RLS test was added because the diff introduces no new access path. |
 
 ### Markdown unit (`markdown-unit.spec.ts`)
 
@@ -55,6 +57,22 @@ run against a local Supabase stack in **fixture** mode. This page documents the 
 | Title escaping | Quotes escaped, newlines flattened in the frontmatter title. |
 | Sections | `### 2.4 Constraints`, risk callout, and `### Option 1 —` present. |
 | Exclusion | `exportablePlanMarkdown` is not embedded in the output. |
+
+### Diff unit (`diff-unit.spec.ts`, v0.8)
+
+Eight pure-function checks for `diffPlans(previous, next)` — no browser or DB (driven with fixture
+plans through the Playwright runner).
+
+| Check | What it verifies |
+|---|---|
+| Purity | Identical inputs produce identical output. |
+| No-change | Identical snapshots → `hasAnyChange` false; no scalar/risk change. |
+| Scalar diff | `before → after` reported (fixture `medium → critical` risk level). |
+| Array classify | `added` / `removed` / `unchanged` with deterministic ordering. |
+| Order-insensitive | Reordering the same items is **not** a change. |
+| Prototype stable | Options unchanged across the standard vs critical fixtures. |
+| Prototype count | A removed option surfaces via a count change (`status: removed`). |
+| Exclusion | `exportablePlanMarkdown` is excluded from the diff. |
 
 ## Running the tests
 
@@ -95,6 +113,14 @@ Hosted GitHub Actions (`.github/workflows/nexus-ci.yml`) is the **authoritative*
 full suite on a clean runner (static-gates + e2e-local-supabase) on every PR and on pushes to
 `main`. Local runs are for fast iteration; when local disk/cache pressure prevents a full local
 run, CI is the source of truth. See [ci-cd.md](ci-cd.md).
+
+> **v0.8 note:** for the read-only revision diff, the full local E2E run was **deferred** (recurring
+> local Docker-down + disk-full pressure); local gates covered typecheck, build, `diff-unit` (8/8),
+> and the `markdown-unit` regression (5/5). Hosted CI then **cleared** the deferred browser E2E:
+> both `static-gates` and `e2e-local-supabase` passed on PR #3
+> ([run 28622380135](https://github.com/ggligor1967/Nexus/actions/runs/28622380135)) and on `main`
+> after merge ([run 28654946356](https://github.com/ggligor1967/Nexus/actions/runs/28654946356),
+> merge commit `0896bc8`).
 
 ## Manual live QA (summary)
 

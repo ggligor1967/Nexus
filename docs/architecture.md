@@ -29,7 +29,7 @@ src/app/
   auth/callback/route.ts             # GET: exchangeCodeForSession → redirect(next)
   dashboard/page.tsx                 # project list + create form (protected)
   projects/[id]/page.tsx             # project workspace (protected)
-  projects/[id]/revisions/[revisionId]/page.tsx   # read-only revision snapshot (protected)
+  projects/[id]/revisions/[revisionId]/page.tsx   # read-only revision snapshot + inline diff (protected)
   api/projects/route.ts              # GET (list) / POST (create)
   api/projects/[id]/route.ts         # GET / PATCH / DELETE
   api/projects/[id]/generate-plan/route.ts   # POST
@@ -128,7 +128,32 @@ A revision is recorded **only** when a successful regeneration follows an existi
 - Failed/invalid regeneration → **no** revision (the failure occurs before the revision insert).
 
 The read-only snapshot route renders both snapshots via `GeneratedPlanView` in `readOnly` mode.
-There is no restore and no diff engine in v0.7.
+There is no restore. As of v0.8 the route also renders a read-only diff above the snapshots (see
+**Diff layer** below); there is still no restore and no mutation of a revision.
+
+## Diff layer (v0.8)
+
+A read-only revision **diff / compare**, added without touching the request flow, the database, or
+any write path:
+
+- **`src/lib/diff/plan.ts`** — a **pure, deterministic** `diffPlans(previous, next)` over two
+  validated `NexusPlan` snapshots. It mirrors the Markdown renderer's purity (identical inputs →
+  identical output), performs no I/O, never mutates its inputs, and is safe to run inside a server
+  component. It returns a structured `PlanDiff`: scalar `{ before, after, changed }` fields,
+  set-based order-insensitive string-array diffs (`added`/`removed`/`unchanged`), index-paired
+  prototype-option diffs, and a top-level `hasAnyChange`. `exportablePlanMarkdown` is excluded (the
+  same exclusion the Markdown export applies).
+- **`src/components/DiffView.tsx`** — a **read-only presentational** component: no state, no data
+  fetching, no controls. It omits unchanged sections and renders an empty state when
+  `hasAnyChange` is false.
+- **Existing revision snapshot route** (`projects/[id]/revisions/[revisionId]/page.tsx`) computes
+  the diff over the two already-loaded snapshots and renders `<DiffView>` **inline** above the
+  full previous/new views, guarded by `previous && next`.
+
+**No DB / RLS / service-role / write-path changes.** The diff is derived at render time from the two
+snapshots already loaded by the ownership-checked page; it adds no route, no query, and no new
+access path (`revisions` remain written only via the admin/service-role client). See
+[export-and-revisions.md](export-and-revisions.md).
 
 ## UI composition
 
